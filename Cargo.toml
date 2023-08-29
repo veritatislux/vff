@@ -1,0 +1,20 @@
+[package]
+name = "vff"
+description = "Volt Package's fuzzy finder"
+authors = ["Volatus"]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/veritatislux/vff"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[profile.dev]
+opt-level = 0
+debug = false
+incremental = true
+
+[profile.release]
+opt-level = 3
+debug = false
+incremental = true
