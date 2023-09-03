@@ -3,7 +3,7 @@ use std::error::Error;
 use std::io::Write;
 use std::io;
 
-const MAX_RESULTS: usize = 4;
+#[macro_use] extern crate debug_here;
 
 pub type EResult<T> = Result<T, Box<dyn Error>>;
 
@@ -30,7 +30,7 @@ pub fn fuzzy_find(target: &str, source: &str) -> EResult<()>
 
     let lines: Vec<&str> = source.split('\n').collect();
 
-    let mut distances = Vec::<usize>::with_capacity(lines.len());
+    let mut distances = Vec::<(usize, bool)>::with_capacity(lines.len());
 
     for line in lines.iter()
     {
@@ -39,153 +39,132 @@ pub fn fuzzy_find(target: &str, source: &str) -> EResult<()>
 
     let order = order_distances(&distances);
 
-    for i in 0..MAX_RESULTS
+    let mut complete_output = String::new();
+    let mut incomplete_output = String::new();
+
+    for idx in order
     {
-        match order.get(i)
+        if distances[idx].1
         {
-            None => { break; }
-            Some(idx) => { writeln!(stdout, "{}: {}", distances[*idx], lines[*idx])?; }
+            complete_output.push_str(&format!(
+                "{}\n",
+                //distances[idx].0,
+                lines[idx]
+            ));
+        }
+        else
+        {
+            incomplete_output.push_str(&format!(
+                "{}\n",
+                //distances[idx].0,
+                lines[idx]
+            ));
         }
     }
+
+    write!(stdout, "{}{}", complete_output, incomplete_output)?;
 
     stdout.flush()?;
 
     Ok(())
 }
 
-pub fn get_distance(target: &str, value: &str) -> usize
+pub fn get_distance(target: &str, value: &str) -> (usize, bool)
 {
     let mut distance: usize = 0;
 
     let mut target_chars = target.chars();
     let mut value_chars = value.chars();
 
-    let mut next_target: Option<char> = target_chars.next();
-    let mut next_value: Option<char> = value_chars.next();
-
-    let mut found_all: bool = false;
-
-    while let Some(next_target_char) = next_target
+    loop
     {
-        if next_value == None
+        let target_char = target_chars.next();
+
+        if target_char == None
         {
-            break;
+            return (distance + value_chars.count(), true);
         }
 
-        if next_value != next_target
-        {
-            distance += 1;
-
-            if value_chars.position(|c| {
-                if c == next_target_char
-                {
-                    true
-                }
-                else
-                {
-                    distance += 1;
-                    false
-                }
-            }) == None
+        if value_chars.position(|c| {
+            if c.to_lowercase().to_string() == target_char.unwrap().to_lowercase().to_string()
+            {
+                true
+            }
+            else
             {
                 distance += 1;
+                false
             }
-            else if target_chars.clone().peekable().peek() == None
-            {
-                found_all = true;
-            }
-        }
-
-        next_target = target_chars.next();
-        next_value = value_chars.next();
-    }
-
-    if let Some(_) = next_value
-    {
-        distance += value_chars.count() + 1;
-
-        if next_target == None
+        }) == None
         {
-            found_all = true;
+            return (distance + target_chars.count() + 1, false);
         }
     }
-
-    if let Some(_) = next_target
-    {
-        distance += target_chars.count() + 1;
-    }
-
-    if found_all
-    {
-        distance /= 2;
-    }
-
-    distance
 }
 
-pub fn order_distances(distances: &Vec<usize>) -> Vec<usize>
+pub fn order_distances(distances: &[(usize, bool)]) -> Vec<usize>
 {
     let mut order: Vec<usize> = (0..distances.len()).collect();
 
-    order.sort_by(|a, b| distances[*a].cmp(&distances[*b]));
+    order.sort_by(|a, b| distances[*a].0.cmp(&distances[*b].0));
 
     order
 }
 
 #[cfg(test)]
-mod tests
+mod test
 {
     use crate::*;
 
     #[test]
     fn exact_matches()
     {
-        assert_eq!(get_distance("greek", "greek"), 0);
-        assert_eq!(get_distance("banan", "banan"), 0);
-        assert_eq!(get_distance("pterodactyl", "pterodactyl"), 0);
-        assert_eq!(get_distance("monstertruck", "monstertruck"), 0);
-        assert_eq!(get_distance("a", "a"), 0);
+        assert_eq!(get_distance("greek", "greek").0, 0);
+        assert_eq!(get_distance("banan", "banan").0, 0);
+        assert_eq!(get_distance("pterodactyl", "pterodactyl").0, 0);
+        assert_eq!(get_distance("monstertruck", "monstertruck").0, 0);
+        assert_eq!(get_distance("a", "a").0, 0);
     }
 
     #[test]
     fn off_by_one_values()
     {
-        assert_eq!(get_distance("greek", "gree"), 1);
-        assert_eq!(get_distance("banan", "bana"), 1);
-        assert_eq!(get_distance("pterodactyl", "pterodacty"), 1);
-        assert_eq!(get_distance("monstertruck", "monstertruc"), 1);
+        assert_eq!(get_distance("greek", "gree").0, 1);
+        assert_eq!(get_distance("banan", "bana").0, 1);
+        assert_eq!(get_distance("pterodactyl", "pterodacty").0, 1);
+        assert_eq!(get_distance("monstertruck", "monstertruc").0, 1);
     }
 
     #[test]
     fn off_by_one_targets()
     {
-        assert_eq!(get_distance("gree", "greek"), 1);
-        assert_eq!(get_distance("bana", "banan"), 1);
-        assert_eq!(get_distance("pterodacty", "pterodactyl"), 1);
-        assert_eq!(get_distance("monstertruc", "monstertruck"), 1);
+        assert_eq!(get_distance("gree", "greek").0, 1);
+        assert_eq!(get_distance("bana", "banan").0, 1);
+        assert_eq!(get_distance("pterodacty", "pterodactyl").0, 1);
+        assert_eq!(get_distance("monstertruc", "monstertruck").0, 1);
     }
 
     #[test]
     fn zero_match()
     {
-        assert_eq!(get_distance("abc", "def"), 6);
-        assert_eq!(get_distance("ghi", "jkl"), 6);
-        assert_eq!(get_distance("xxxxx", "yyyyy"), 10);
+        assert_eq!(get_distance("abc", "def").0, 6);
+        assert_eq!(get_distance("ghi", "jkl").0, 6);
+        assert_eq!(get_distance("xxxxx", "yyyyy").0, 10);
     }
 
     #[test]
     fn mid_scrambled()
     {
-        assert_eq!(get_distance("xxx", "xxyx"), 1);
-        assert_eq!(get_distance("xxx", "xxyzx"), 2);
-        assert_eq!(get_distance("xxx", "xxyzwx"), 3);
+        assert_eq!(get_distance("xxx", "xxyx").0, 1);
+        assert_eq!(get_distance("xxx", "xxyzx").0, 2);
+        assert_eq!(get_distance("xxx", "xxyzwx").0, 3);
     }
 
     #[test]
     fn half_right()
     {
-        assert_eq!(get_distance("xxxxxx", "xxxyyy"), 6);
-        assert_eq!(get_distance("xxxxxx", "yyyxxx"), 6);
-        assert_eq!(get_distance("xxxxxx", "xyxyxy"), 6);
+        assert_eq!(get_distance("xxxxxx", "xxxyyy").0, 6);
+        assert_eq!(get_distance("xxxxxx", "yyyxxx").0, 6);
+        assert_eq!(get_distance("xxxxxx", "xyxyxy").0, 6);
     }
 }

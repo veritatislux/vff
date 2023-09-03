@@ -11,10 +11,13 @@ repository = "https://github.com/veritatislux/vff"
 
 [profile.dev]
 opt-level = 0
-debug = false
-incremental = true
+debug = 2
+incremental = false
 
 [profile.release]
 opt-level = 3
 debug = false
-incremental = true
+incremental = false
+
+[dependencies]
+debug-here = "0.2.2"
